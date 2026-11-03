@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        LLAMA_CPP_VERSION: v0.8.0
+        LLAMA_CPP_REF: master      # 拉取最新 llama.cpp；可用 tag/SHA 固定版本
         # APP_VERSION: 20261103   # 可选，构建时注入版本号
     image: gguf-quantizer:latest
     container_name: gguf-quantizer

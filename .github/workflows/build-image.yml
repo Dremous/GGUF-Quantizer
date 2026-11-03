@@ -28,6 +28,15 @@ jobs:
           echo "DATE=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
           echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
+      # 每次构建都拉取最新 llama.cpp：获取 master 最新 commit SHA 注入 LLAMA_CPP_REF，
+      # SHA 每次变化会令 Docker 层缓存失效，从而真正重新拉取并编译最新 llama-quantize。
+      - name: 获取最新 llama.cpp commit
+        id: llama
+        run: |
+          SHA=$(curl -fsSL https://api.github.com/repos/ggml-org/llama.cpp/commits/master \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
+          echo "LLAMA_CPP_REF=${SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -47,10 +56,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          # 将镜像版本（DATE-SHORT_SHA）注入 /api/health，供运维核对
+          # 每次构建注入 APP_VERSION 与最新 llama.cpp commit SHA（后者强制重拉最新源码）
           build-args: |
             APP_VERSION=${{ steps.image.outputs.DATE }}-${{ steps.image.outputs.SHORT_SHA }}
-          # GitHub Actions 缓存，避免每次全量编译 llama.cpp
+            LLAMA_CPP_REF=${{ steps.llama.outputs.LLAMA_CPP_REF }}
+          # gha 缓存：系统依赖/apt/npm 层复用加速；llama.cpp 层因 LLAMA_CPP_REF 变化而失效 → 每次重新拉取编译
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |

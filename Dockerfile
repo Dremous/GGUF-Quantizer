@@ -31,11 +31,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# llama.cpp 版本标签（可用 --build-arg LLAMA_CPP_VERSION=<tag> 覆盖）
-ARG LLAMA_CPP_VERSION=v0.8.0
+# 每次构建都拉取最新的 llama.cpp 源码（默认 master 分支 = 最新）。
+# CI 会把当前 master 的最新 commit SHA 注入 LLAMA_CPP_REF：
+#   SHA 每次变化 → Docker 层缓存自动失效 → 每次构建都会重新拉取并编译最新的 llama-quantize。
+# 本地手动构建也可用 --build-arg LLAMA_CPP_REF=<tag|SHA> 固定到某个版本。
+ARG LLAMA_CPP_REF=master
 
-RUN git clone --depth 1 --branch "${LLAMA_CPP_VERSION}" \
-        https://github.com/ggml-org/llama.cpp.git /opt/llama.cpp
+RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /opt/llama.cpp \
+    && if [ "${LLAMA_CPP_REF}" != "master" ]; then \
+         git -C /opt/llama.cpp fetch --depth 1 origin "${LLAMA_CPP_REF}" \
+         && git -C /opt/llama.cpp checkout "${LLAMA_CPP_REF}"; \
+       fi
 
 WORKDIR /opt/llama.cpp
 

@@ -9,7 +9,7 @@
 
 [![Build & Push](https://github.com/Dremous/GGUF-Quantizer/actions/workflows/build-image.yml/badge.svg)](https://github.com/Dremous/GGUF-Quantizer/actions/workflows/build-image.yml)
 [![Docker Image](https://img.shields.io/badge/image-ghcr.io%2Fdremous%2Fgguf--quantizer%3Alatest-10b981?style=flat-square&logo=docker&logoColor=white)](https://github.com/Dremous/GGUF-Quantizer/pkgs/container/gguf-quantizer)
-[![llama.cpp](https://img.shields.io/badge/llama.cpp-v0.8.0-059669?style=flat-square)](https://github.com/ggml-org/llama.cpp)
+[![llama.cpp](https://img.shields.io/badge/llama.cpp-latest-059669?style=flat-square)](https://github.com/ggml-org/llama.cpp)
 [![Platform](https://img.shields.io/badge/platform-amd64%20%7C%20arm64-64748b?style=flat-square)](#-github-action-自动发布)
 [![License](https://img.shields.io/badge/license-MIT-10b981?style=flat-square)](LICENSE)
 
@@ -121,7 +121,11 @@ docker compose up -d --build     # 首次需联网编译 llama.cpp，耗时较�
 - 手动触发（Actions → Run workflow）
 - 每周日自动重建
 
-发布标签：`latest`、`<日期>`、`<日期>-<commit 短哈希>`，并启用 gha 构建缓存加速（复用 llama.cpp 编译结果）。
+**每次构建都会自动拉取最新的 llama.cpp 源码并编译最新 `llama-quantize`**：工作流会查询 llama.cpp `master` 的最新 commit，把其 SHA 作为 `LLAMA_CPP_REF` 注入构建——SHA 每次变化会令 Docker 层缓存失效，从而真正重新拉取、重新编译，不会被缓存复用旧版。
+
+发布标签：`latest`、`<日期>`、`<日期>-<commit 短哈希>`，其余层（apt/npm/系统依赖）仍使用 gha 缓存加速，只有 llama.cpp 编译始终全新执行。
+
+> 本地手动构建默认同样拉取最新：`docker compose up -d --build` 使用 `LLAMA_CPP_REF=master`；如需固定版本，可 `--build-arg LLAMA_CPP_REF=v0.8.0`。
 
 > 可选：配置仓库 secret `WEBHOOK_URL`（飞书 / 企微 / 钉钉机器人地址），构建失败时自动推送告警。
 
