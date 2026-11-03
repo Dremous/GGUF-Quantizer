@@ -4,6 +4,7 @@ services:
       context: .
       args:
         LLAMA_CPP_VERSION: v0.8.0
+        # APP_VERSION: 20261103   # 可选，构建时注入版本号
     image: gguf-quantizer:latest
     container_name: gguf-quantizer
     ports:

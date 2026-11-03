@@ -45,6 +45,23 @@ OUTPUT_DIR = DATA_DIR / "outputs"
 QUANT_BINARY = os.environ.get("QUANT_BINARY", "llama-quantize")
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "4096")) * 1024 * 1024
 CLEANUP_HOURS = float(os.environ.get("CLEANUP_HOURS", "12"))
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
+
+
+def _resolve_web_dist() -> Path:
+    """定位前端构建产物目录（Vue/Vite 构建输出）。"""
+    env = os.environ.get("WEB_DIST")
+    if env:
+        return Path(env)
+    pkg = Path(__file__).parent.parent / "frontend" / "dist"
+    if pkg.is_dir():
+        return pkg
+    return Path(__file__).parent / "static"
+
+
+WEB_DIST = _resolve_web_dist()
+WEB_DIST.mkdir(parents=True, exist_ok=True)
+(WEB_DIST / "assets").mkdir(parents=True, exist_ok=True)
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -57,9 +74,8 @@ app = FastAPI(
 
 manager = JobManager(UPLOAD_DIR, OUTPUT_DIR, binary=QUANT_BINARY)
 
-# 前端静态文件
-_STATIC = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+# 前端静态资源（Vue/Vite 构建产物）
+app.mount("/assets", StaticFiles(directory=str(WEB_DIST / "assets")), name="assets")
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +138,7 @@ def health() -> dict:
     _cleanup_expired()
     return {
         "status": "ok",
+        "version": APP_VERSION,
         "quant_binary": QUANT_BINARY,
         "disk_free_gib": round(shutil.disk_usage(OUTPUT_DIR).free / (1 << 30), 2),
         "active_jobs": sum(
@@ -273,4 +290,4 @@ def delete_upload(upload_id: str) -> JSONResponse:
 # 前端单页
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(str(_STATIC / "index.html"))
+    return FileResponse(str(WEB_DIST / "index.html"))
