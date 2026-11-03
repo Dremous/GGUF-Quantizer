@@ -1,0 +1,72 @@
+name: Build & Push Image
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"           # 每周日自动重建
+  workflow_dispatch:              # 支持手动触发
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write             # 允许推送 GHCR 包
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image name and date
+        id: image
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "DATE=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # 将镜像版本（DATE-SHORT_SHA）注入 /api/health，供运维核对
+          build-args: |
+            APP_VERSION=${{ steps.image.outputs.DATE }}-${{ steps.image.outputs.SHORT_SHA }}
+          # GitHub Actions 缓存，避免每次全量编译 llama.cpp
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/${{ steps.image.outputs.IMAGE_NAME }}:latest
+            ghcr.io/${{ steps.image.outputs.IMAGE_NAME }}:${{ steps.image.outputs.DATE }}
+            ghcr.io/${{ steps.image.outputs.IMAGE_NAME }}:${{ steps.image.outputs.DATE }}-${{ steps.image.outputs.SHORT_SHA }}
+
+      - name: 构建失败通知
+        if: failure()
+        env:
+          # 可选：配置仓库 secret WEBHOOK_URL（飞书/企业微信/钉钉机器人地址）即可推送失败告警
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          echo "::error::GGUF-Quantizer 镜像构建失败（run #${{ github.run_number }}）"
+          if [ -n "$WEBHOOK_URL" ]; then
+            curl -fsS -X POST "$WEBHOOK_URL" \
+              -H 'Content-Type: application/json' \
+              -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"GGUF-Quantizer 镜像构建失败 run#${{ github.run_number }}\"}}" || true
+          fi
