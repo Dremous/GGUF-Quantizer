@@ -87,7 +87,8 @@ COPY --from=frontend-build /web/dist /app/web
 WORKDIR /app
 
 COPY app/requirements.txt ./
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Ubuntu 24.04 系统 Python 为外部托管环境（PEP 668），需 --break-system-packages 才能 pip 安装
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 COPY app/ ./
 
