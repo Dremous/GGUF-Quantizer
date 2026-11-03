@@ -56,8 +56,9 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build build --config Release --target llama-quantize -j"$(nproc)" \
     && cp build/bin/llama-quantize /usr/local/bin/llama-quantize
 
-# 构建产物自检
-RUN llama-quantize --help >/dev/null
+# 构建产物自检：确认可执行文件已生成且可执行。
+# 注意 llama-quantize 对 --help 返回非 0，故不能用 --help 判断，改用存在性/可执行校验。
+RUN test -x /usr/local/bin/llama-quantize && test -s /usr/local/bin/llama-quantize
 
 
 # ---------- 阶段 3：运行时 ----------
