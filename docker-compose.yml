@@ -1,0 +1,20 @@
+services:
+  gguf-quantizer:
+    build:
+      context: .
+      args:
+        LLAMA_CPP_VERSION: v0.8.0
+    image: gguf-quantizer:latest
+    container_name: gguf-quantizer
+    ports:
+      - "8000:8000"
+    environment:
+      - MAX_UPLOAD_MB=4096        # 单个上传文件上限（MB）
+      - CLEANUP_HOURS=12          # 上传/输出文件自动清理时间（小时）
+      - AUTO_CLEAN_OUTPUTS=1      # 是否自动清理量化结果文件
+    volumes:
+      - gguf-data:/data           # 持久化上传与量化结果
+    restart: unless-stopped
+
+volumes:
+  gguf-data:
