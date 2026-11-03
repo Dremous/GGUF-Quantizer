@@ -175,6 +175,7 @@ GGUF-Quantizer/
 ├── app/                                # FastAPI 后端
 │   ├── main.py
 │   ├── quantizer.py                    # 后台量化作业管理
+│   ├── docker-entrypoint.sh            # 入口：校正卷属主后降权运行
 │   └── requirements.txt
 ├── docs/screenshot.png                 # 界面预览
 ├── tests/smoke_test.py                 # 端到端冒烟测试
@@ -185,7 +186,7 @@ GGUF-Quantizer/
 
 ## 🔒 安全说明
 
-- 服务以非 root 用户运行
+- 入口脚本以 root 校正挂载卷 `/data` 属主后立即用 `gosu` 降权，**uvicorn 实际以非 root 用户 `quantizer` 运行**（兼容 root 所有的旧卷）
 - 上传文件校验 GGUF 魔数，拒绝非 GGUF 文件
 - 量化类型白名单校验，输出文件名做安全清洗，命令参数化调用（无 shell 注入）
 - 量化结果为纯 CPU 计算，无需 GPU

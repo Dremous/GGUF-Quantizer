@@ -79,6 +79,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
         ca-certificates \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=llama-build /usr/local/bin/llama-quantize /usr/local/bin/llama-quantize
@@ -92,14 +93,17 @@ RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 COPY app/ ./
 
-# 数据目录（上传、输出）+ 以非 root 运行
+# 创建非 root 运行用户；镜像内 /data 先置好属主，并给 entrypoint 加可执行权限。
+# 运行时挂载卷的属主由 docker-entrypoint.sh 再次校正（兼容已存在的旧卷）。
 RUN mkdir -p /data/uploads /data/outputs \
     && useradd -m -u 10001 quantizer \
+    && chmod +x /app/docker-entrypoint.sh \
     && chown -R quantizer:quantizer /app /data
-USER quantizer
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python3 -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)" || exit 1
 
+# entrypoint 以 root 校正挂载卷属主后降权到 quantizer，故实际 uvicorn 进程仍为非 root
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
