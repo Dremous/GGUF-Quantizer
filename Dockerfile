@@ -45,8 +45,11 @@ RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /opt/llama.cpp
 
 WORKDIR /opt/llama.cpp
 
-# CPU-only 构建：量化本身是纯 CPU 任务，无需 CUDA/ROCm/Metal/Vulkan
+# CPU-only 构建：量化本身是纯 CPU 任务，无需 CUDA/ROCm/Metal/Vulkan。
+# 关键：BUILD_SHARED_LIBS=OFF 让 llama-quantize-impl / llama / ggml 全部静态链接，
+# 产出自包含的单一可执行文件，避免运行时还要拷贝 libllama-quantize-impl.so 等一整串共享库。
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
         -DGGML_CUDA=OFF \
         -DGGML_METAL=OFF \
         -DGGML_VULKAN=OFF \
