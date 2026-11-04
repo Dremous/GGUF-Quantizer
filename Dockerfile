@@ -78,11 +78,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
+# libgomp1：ggml CPU 后端默认启用 OpenMP(GGML_OPENMP=ON)，静态链接的量化二进制仍动态依赖 libgomp.so.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
         ca-certificates \
         gosu \
+        libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=llama-build /usr/local/bin/llama-quantize /usr/local/bin/llama-quantize
