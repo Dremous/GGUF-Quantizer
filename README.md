@@ -30,6 +30,7 @@
 - 📊 **实时进度**：终端式日志实时滚动，进度条 + 状态徽章
 - ⬇️ **下载**：量化完成一键下载结果
 - 🧹 **手动清理**：下载后一键清理量化文件、立即释放磁盘空间（带二次确认），无需等待定时清理
+- ℹ️ **关于信息**：「关于」弹窗查看当前 llama.cpp 版本（bXXXX）、应用版本与运行环境
 - 🐳 **自动发布**：GitHub Action 自动下载官方预编译并发布多架构镜像到 GHCR
 
 ---
@@ -107,10 +108,11 @@ docker compose up -d --build     # 构建前端，并联网下载官方预编译
 |------|--------|------|
 | `MAX_UPLOAD_MB` | `102400` | 单个上传文件大小上限（MB），默认 100 GiB；`0` = 不限制 |
 | `CLEANUP_HOURS` | `12` | 上传/输出文件自动清理时间（小时） |
-| `AUTO_CLEAN_OUTPUTS` | `1` | 会不会自动清理量化结果文件 |
+| `AUTO_CLEAN_OUTPUTS` | `1` | 是否自动清理量化结果文件 |
 | `DATA_DIR` | `/data` | 数据目录（挂载卷） |
 | `WEB_DIST` | `/app/web` | 前端构建产物目录 |
 | `APP_VERSION` | `dev` | 镜像版本（注入 `/api/health`） |
+| `LLAMA_RELEASE_FILE` | `/opt/llama/RELEASE` | 构建时写入的 llama.cpp 版本（bXXXX）文件，供“关于”弹窗读取 |
 
 ---
 
@@ -173,7 +175,7 @@ GGUF-Quantizer/
 │   ├── src/
 │   │   ├── App.vue
 │   │   ├── api.js
-│   │   └── components/                 # HealthBadge / UploadZone / QuantForm / JobPanel
+│   │   └── components/                 # HealthBadge / UploadZone / QuantForm / JobPanel / AboutModal
 │   └── package.json
 ├── app/                                # FastAPI 后端
 │   ├── main.py
