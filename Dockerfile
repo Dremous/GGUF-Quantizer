@@ -107,6 +107,9 @@ RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 COPY app/ ./
 
+# 构建期语法闸门：任一后端文件存在语法错误立即让构建失败，避免坏镜像拖到运行时才崩溃
+RUN python3 -m py_compile /app/*.py && rm -rf /app/__pycache__
+
 # 创建非 root 运行用户；镜像内 /data 先置好属主，并给 entrypoint 加可执行权限。
 # 运行时挂载卷的属主由 docker-entrypoint.sh 再次校正（兼容已存在的旧卷）。
 RUN mkdir -p /data/uploads /data/outputs \

@@ -121,7 +121,7 @@ class Job:
         self.log: list[str] = []
         self.error: str | None = None
         self.created_at = time.time()
-        self.finished_at = float | None = None
+        self.finished_at: float | None = None
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
 
