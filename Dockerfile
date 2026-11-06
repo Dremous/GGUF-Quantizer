@@ -35,21 +35,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # TARGETARCH 由 BuildKit 自动注入（amd64 / arm64），映射到官方对应的预编译包。
 ARG TARGETARCH
 ARG LLAMA_CPP_RELEASE=
+# 指定版本优先尝试；同时始终解析最近 10 个 b 标签作为回退候选（去重），
+# 即使指定标签“release 已发布但资产 CDN 尚未就绪”（短暂 404），也能自动回退到上一个可用版本。
 RUN set -eux; \
     case "${TARGETARCH}" in \
         amd64) LLAMA_PKG="ubuntu-x64" ;; \
         arm64) LLAMA_PKG="ubuntu-arm64" ;; \
         *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    if [ -n "${LLAMA_CPP_RELEASE}" ]; then \
-        CANDIDATES="${LLAMA_CPP_RELEASE}"; \
-    else \
-        CANDIDATES=$(git ls-remote --tags https://github.com/ggml-org/llama.cpp 'refs/tags/b*' \
-            | awk '{print $2}' \
-            | sed -e 's#refs/tags/##' -e 's#\^{}##' \
-            | grep -E '^b[0-9]+$' \
-            | sort -V -r | head -10); \
-    fi; \
+    if [ -n "${LLAMA_CPP_RELEASE}" ]; then PINNED="${LLAMA_CPP_RELEASE}"; else PINNED=""; fi; \
+    AUTO_TAGS=$(git ls-remote --tags https://github.com/ggml-org/llama.cpp 'refs/tags/b*' \
+        | awk '{print $2}' \
+        | sed -e 's#refs/tags/##' -e 's#\^{}##' \
+        | grep -E '^b[0-9]+$' \
+        | sort -V -r | head -10); \
+    CANDIDATES=$( { printf '%s\n' "${PINNED}"; printf '%s\n' ${AUTO_TAGS}; } \
+        | grep -E '^b[0-9]+$' | awk '!seen[$0]++'); \
     FOUND=""; \
     for TAG in ${CANDIDATES}; do \
         LLAMA_FILE="llama-${TAG}-bin-${LLAMA_PKG}.tar.gz"; \
