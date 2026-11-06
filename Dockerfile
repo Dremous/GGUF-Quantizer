@@ -1,7 +1,7 @@
 # ============================================================================
 # GGUF Quantizer — 三阶段构建
 #   阶段 1 (frontend-build): Vue/Vite 前端构建（Tailwind）
-#   阶段 2 (llama-build)   : llama.cpp llama-quantize 源码编译（CPU-only）
+#   阶段 2 (llama-fetch)   : 下载 llama.cpp 官方预编译 llama-quantize（CPU）
 #   阶段 3 (runtime)       : 精简运行时 + Python Web 服务
 #
 # 版本号通过 --build-arg APP_VERSION=<tag> 注入（GitHub Action 会自动填写）。
@@ -20,48 +20,52 @@ COPY frontend/ ./
 RUN npm run build
 
 
-# ---------- 阶段 2：编译量化工具 ----------
-FROM ubuntu:24.04 AS llama-build
+# ---------- 阶段 2：下载官方预编译量化工具 ----------
+FROM ubuntu:24.04 AS llama-fetch
 
 ENV DEBIAN_FRONTEND=noninteractive
+# ca-certificates/curl 用于下载；git 仅在需要自动解析最新 bXXXX 标签时使用（git ls-remote）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        git \
         ca-certificates \
+        curl \
+        git \
     && rm -rf /var/lib/apt/lists/*
 
-# 每次构建都拉取最新的 llama.cpp 源码（默认 master 分支 = 最新）。
-# CI 会把当前 master 的最新 commit SHA 注入 LLAMA_CPP_REF：
-#   SHA 每次变化 → Docker 层缓存自动失效 → 每次构建都会重新拉取并编译最新的 llama-quantize。
-# 本地手动构建也可用 --build-arg LLAMA_CPP_REF=<tag|SHA> 固定到某个版本。
-ARG LLAMA_CPP_REF=master
-
-RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /opt/llama.cpp \
-    && if [ "${LLAMA_CPP_REF}" != "master" ]; then \
-         git -C /opt/llama.cpp fetch --depth 1 origin "${LLAMA_CPP_REF}" \
-         && git -C /opt/llama.cpp checkout "${LLAMA_CPP_REF}"; \
-       fi
-
-WORKDIR /opt/llama.cpp
-
-# CPU-only 构建：量化本身是纯 CPU 任务，无需 CUDA/ROCm/Metal/Vulkan。
-# 关键：BUILD_SHARED_LIBS=OFF 让 llama-quantize-impl / llama / ggml 全部静态链接，
-# 产出自包含的单一可执行文件，避免运行时还要拷贝 libllama-quantize-impl.so 等一整串共享库。
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=OFF \
-        -DGGML_CUDA=OFF \
-        -DGGML_METAL=OFF \
-        -DGGML_VULKAN=OFF \
-        -DGGML_SYCL=OFF \
-        -DGGML_HIP=OFF \
-        -DLLAMA_CURL=OFF \
-    && cmake --build build --config Release --target llama-quantize -j"$(nproc)" \
-    && cp build/bin/llama-quantize /usr/local/bin/llama-quantize
-
-# 构建产物自检：确认可执行文件已生成且可执行。
-# 注意 llama-quantize 对 --help 返回非 0，故不能用 --help 判断，改用存在性/可执行校验。
-RUN test -x /usr/local/bin/llama-quantize && test -s /usr/local/bin/llama-quantize
+# 目标发布版本：留空则构建时自动解析最新 bXXXX；也可传入具体标签（如 b12171）固定版本。
+# TARGETARCH 由 BuildKit 自动注入（amd64 / arm64），映射到官方对应的预编译包。
+ARG TARGETARCH
+ARG LLAMA_CPP_RELEASE=
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) LLAMA_PKG="ubuntu-x64" ;; \
+        arm64) LLAMA_PKG="ubuntu-arm64" ;; \
+        *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    if [ -n "${LLAMA_CPP_RELEASE}" ]; then \
+        CANDIDATES="${LLAMA_CPP_RELEASE}"; \
+    else \
+        CANDIDATES=$(git ls-remote --tags https://github.com/ggml-org/llama.cpp 'refs/tags/b*' \
+            | awk '{print $2}' \
+            | sed -e 's#refs/tags/##' -e 's#\^{}##' \
+            | grep -E '^b[0-9]+$' \
+            | sort -V -r | head -10); \
+    fi; \
+    FOUND=""; \
+    for TAG in ${CANDIDATES}; do \
+        LLAMA_FILE="llama-${TAG}-bin-${LLAMA_PKG}.tar.gz"; \
+        LLAMA_URL="https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/${LLAMA_FILE}"; \
+        echo "trying ${LLAMA_URL}"; \
+        if curl -fsSL --retry 2 "${LLAMA_URL}" -o /tmp/llama.tar.gz; then \
+            FOUND="${TAG}"; break; \
+        fi; \
+        echo "asset not ready for ${TAG}, trying previous..."; \
+    done; \
+    test -n "${FOUND}"; \
+    echo "using llama.cpp release: ${FOUND}"; \
+    mkdir -p /opt/llama; \
+    tar -xzf /tmp/llama.tar.gz -C /opt/llama --strip-components=1; \
+    rm -f /tmp/llama.tar.gz; \
+    test -x /opt/llama/llama-quantize
 
 
 # ---------- 阶段 3：运行时 ----------
@@ -70,6 +74,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DATA_DIR=/data \
     WEB_DIST=/app/web \
+    QUANT_BINARY=/opt/llama/llama-quantize \
     MAX_UPLOAD_MB=102400 \
     CLEANUP_HOURS=12 \
     PYTHONUNBUFFERED=1
@@ -78,7 +83,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
-# libgomp1：ggml CPU 后端默认启用 OpenMP(GGML_OPENMP=ON)，静态链接的量化二进制仍动态依赖 libgomp.so.1
+# libgomp1：官方预编译的 ggml CPU 后端启用 OpenMP，运行时仍动态依赖 libgomp.so.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
@@ -87,8 +92,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=llama-build /usr/local/bin/llama-quantize /usr/local/bin/llama-quantize
+# 官方预编译为动态链接（RUNPATH=$ORIGIN），整包放在同一目录，二进制即可自动找到配套 .so
+COPY --from=llama-fetch /opt/llama /opt/llama
 COPY --from=frontend-build /web/dist /app/web
+
+# 确保非 root 用户可读、可执行（大写 X 仅对目录与已有可执行文件赋执行权限）
+RUN chmod -R a+rX /opt/llama
 
 WORKDIR /app
 

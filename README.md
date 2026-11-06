@@ -30,7 +30,7 @@
 - 📊 **实时进度**：终端式日志实时滚动，进度条 + 状态徽章
 - ⬇️ **下载**：量化完成一键下载结果
 - 🧹 **手动清理**：下载后一键清理量化文件、立即释放磁盘空间（带二次确认），无需等待定时清理
-- 🐳 **自动发布**：GitHub Action 自动编译并发布多架构镜像到 GHCR
+- 🐳 **自动发布**：GitHub Action 自动下载官方预编译并发布多架构镜像到 GHCR
 
 ---
 
@@ -59,12 +59,12 @@ volumes:
 docker compose -f docker-compose.pull.yml up -d
 ```
 
-### 方式二：本地源码构建
+### 方式二：本地构建
 
 ```bash
 git clone https://github.com/Dremous/GGUF-Quantizer.git
 cd GGUF-Quantizer
-docker compose up -d --build     # 首次需联网编译 llama.cpp，耗时较长
+docker compose up -d --build     # 构建前端，并联网下载官方预编译 llama-quantize，速度快
 ```
 
 构建完成后打开 **http://localhost:8000** 即可使用。
@@ -116,17 +116,19 @@ docker compose up -d --build     # 首次需联网编译 llama.cpp，耗时较�
 
 ## 🤖 GitHub Action 自动发布
 
-`.github/workflows/build-image.yml` 会在以下情况自动编译并发布**多架构（amd64/arm64）**镜像到 **GHCR**：
+`.github/workflows/build-image.yml` 会在以下情况自动下载官方预编译并发布**多架构（amd64/arm64）**镜像到 **GHCR**：
 
 - 推送 `main` 分支或 `v*` 标签
 - 手动触发（Actions → Run workflow）
 - 每周日自动重建
 
-**每次构建都会自动拉取最新的 llama.cpp 源码并编译最新 `llama-quantize`**：工作流会查询 llama.cpp `master` 的最新 commit，把其 SHA 作为 `LLAMA_CPP_REF` 注入构建——SHA 每次变化会令 Docker 层缓存失效，从而真正重新拉取、重新编译，不被缓存复用旧版。
+**不再从源码编译，直接使用 llama.cpp 官方预编译包**：工作流通过带 `GITHUB_TOKEN` 认证的 `gh api` 取最新**已发布**的 `bXXXX` 标签（不占未认证限流额度，且能避开“标签已推送但资产未发布”的版本），把它作为 `LLAMA_CPP_RELEASE` 注入构建，再按 `TARGETARCH` 下载对应的官方 CPU 包（amd64 用 `llama-bXXXX-bin-ubuntu-x64.tar.gz`，arm64 用 `llama-bXXXX-bin-ubuntu-arm64.tar.gz`）。标签每次变化会令 Docker 层缓存失效，从而真正重新下载最新 `llama-quantize`，不会被缓存复用旧版。
 
-发布标签：`latest`、`<日期>`、`<日期>-<commit 短哈希>`，其余层（apt/npm/系统依赖）仍使用 gha 缓存加速，只有 llama.cpp 编译始终全新执行。
+预编译包为动态链接（`RUNPATH=$ORIGIN`），整包放在 `/opt/llama` 即可自动定位配套 `.so`；运行时仍需 `libgomp1`（OpenMP）。
 
-> 本地手动构建默认同样拉取最新：`docker compose up -d --build` 使用 `LLAMA_CPP_REF=master`；如需固定版本，可 `--build-arg LLAMA_CPP_REF=v0.8.0`。
+发布标签：`latest`、`<日期>`、`<日期>-<commit 短哈希>`，其余层（apt/npm/系统依赖）仍使用 gha 缓存加速，只有 llama 下载层随 `bXXXX` 标签变化而刷新。
+
+> 本地手动构建默认同样自动跟最新：`docker compose up -d --build` 时 `LLAMA_CPP_RELEASE` 留空，Docker 会在构建内自行解析最新 `bXXXX`；如需固定版本，可 `--build-arg LLAMA_CPP_RELEASE=b12171`。
 
 > 可选：配置仓库 secret `WEBHOOK_URL`（飞书 / 企微 / 钉钉机器人地址），构建失败时自动推送告警。
 
@@ -164,8 +166,8 @@ npm run dev     # 访问 http://localhost:5173，/api 已代理到后端 8000
 
 ```
 GGUF-Quantizer/
-├── .github/workflows/build-image.yml   # CI：自动编译并发布 GHCR 镜像
-├── Dockerfile                          # 三阶段构建（前端 + llama.cpp + 运行时）
+├── .github/workflows/build-image.yml   # CI：下载官方预编译并发布 GHCR 镜像
+├── Dockerfile                          # 三阶段构建（前端 + 下载预编译 + 运行时）
 ├── docker-compose.yml                  # 本地构建编排
 ├── frontend/                           # Vue3 + Vite + Tailwind 前端
 │   ├── src/

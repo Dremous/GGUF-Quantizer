@@ -28,15 +28,19 @@ jobs:
           echo "DATE=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
           echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      # 每次构建都拉取最新 llama.cpp：取 master 最新 commit SHA 注入 LLAMA_CPP_REF，
-      # SHA 每次变化令 Docker 层缓存失效 → 真正重新拉取并编译最新 llama-quantize。
-      # 用 git ls-remote（git 协议，非 REST API），避免共享 runner 的 API 限流(403)。
-      - name: 获取最新 llama.cpp commit
+      # 每次构建都使用最新官方预编译：取最新“已发布”的 bXXXX 标签注入 LLAMA_CPP_RELEASE，
+      # 标签每次变化令 Docker 层缓存失效 → 真正重新下载最新 llama-quantize。
+      # 用带 GITHUB_TOKEN 认证的 gh api（不占未认证限流额度），且只统计已发布 release，
+      # 避免选到“标签已推送但资产尚未发布”的版本。
+      - name: 获取最新 llama.cpp 发布标签
         id: llama
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SHA=$(git ls-remote https://github.com/ggml-org/llama.cpp.git refs/heads/master | awk '{print $1}')
-          echo "LLAMA_CPP_REF=${SHA}" >> "$GITHUB_OUTPUT"
-          echo "llama.cpp master ref = ${SHA}"
+          LLAMA_CPP_RELEASE=$(gh api "repos/ggml-org/llama.cpp/releases?per_page=10" \
+            --jq '[ .[].tag_name | select(test("^b[0-9]+$")) ] | sort_by(ltrimstr("b")|tonumber) | last')
+          echo "LLAMA_CPP_RELEASE=${LLAMA_CPP_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "latest published llama.cpp release = ${LLAMA_CPP_RELEASE}"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -57,11 +61,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          # 每次构建注入 APP_VERSION 与最新 llama.cpp commit SHA（后者强制重拉最新源码）
+          # 每次构建注入 APP_VERSION 与最新 bXXXX 标签（后者强制重新下载最新预编译包）
           build-args: |
             APP_VERSION=${{ steps.image.outputs.DATE }}-${{ steps.image.outputs.SHORT_SHA }}
-            LLAMA_CPP_REF=${{ steps.llama.outputs.LLAMA_CPP_REF }}
-          # gha 缓存：系统依赖/apt/npm 层复用加速；llama.cpp 层因 LLAMA_CPP_REF 变化而失效 → 每次重新拉取编译
+            LLAMA_CPP_RELEASE=${{ steps.llama.outputs.LLAMA_CPP_RELEASE }}
+          # gha 缓存：系统依赖/apt/npm 层复用加速；llama 下载层因 LLAMA_CPP_RELEASE 变化而失效 → 每次重新下载
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |

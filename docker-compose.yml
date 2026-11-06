@@ -3,7 +3,8 @@ services:
     build:
       context: .
       args:
-        LLAMA_CPP_REF: master      # 拉取最新 llama.cpp；可用 tag/SHA 固定版本
+        # 留空 = 构建时自动解析最新 bXXXX 官方预编译；填具体标签如 b12171 可固定版本
+        LLAMA_CPP_RELEASE: ""
         # APP_VERSION: 20261103   # 可选，构建时注入版本号
     image: gguf-quantizer:latest
     container_name: gguf-quantizer
@@ -12,7 +13,7 @@ services:
     environment:
       - MAX_UPLOAD_MB=102400      # 单个上传文件上限（MB），默认 100 GiB；设为 0 表示不限制
       - CLEANUP_HOURS=12          # 上传/输出文件自动清理时间（小时）
-      - AUTO_CLEAN_OUTPUTS=1      # 是否自动清理量化结果文件
+      - AUTO_CLEAN_OUTPUTS=1      # 会不会自动清理量化结果文件
     volumes:
       - gguf-data:/data           # 持久化上传与量化结果
     restart: unless-stopped
