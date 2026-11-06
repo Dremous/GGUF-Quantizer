@@ -254,6 +254,28 @@ def cancel_job(job_id: str) -> JSONResponse:
     return JSONResponse(content={"id": job.id, "status": job.state})
 
 
+@app.post("/api/jobs/{job_id}/delete")
+def delete_job_files(job_id: str) -> JSONResponse:
+    job = _get_job_or_404(job_id)
+    if job.state in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="作业进行中，请先取消再清理")
+
+    # 删除量化结果与可能残留的源上传文件，累计释放空间
+    freed = 0
+    for p in (job.output_path, job.upload_path):
+        try:
+            if p.exists():
+                freed += p.stat().st_size
+                p.unlink()
+        except OSError:
+            pass
+
+    manager.remove(job_id)
+    return JSONResponse(
+        content={"deleted": True, "freed_gib": round(freed / (1 << 30), 3)}
+    )
+
+
 @app.get("/api/jobs/{job_id}/download")
 def download_job(job_id: str) -> FileResponse:
     job = _get_job_or_404(job_id)

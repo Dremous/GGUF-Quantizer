@@ -85,6 +85,10 @@ function onJobCancelled() {
   stopPoll()
 }
 
+function onJobCleaned() {
+  reset()
+}
+
 function reset() {
   stopPoll()
   job.value = null
@@ -172,10 +176,10 @@ function reset() {
             class="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-emerald-400/90 to-teal-400/90 text-[13px] font-bold text-emerald-950"
             >3</span
           >
-          <h2 class="text-[15px] font-bold text-white">量化进度与结果</h2>
+          <h2 class="text[15px] font-bold text-white">量化进度与结果</h2>
           <span class="text-xs text-slate-500">实时日志</span>
         </div>
-        <JobPanel :job="job" @cancelled="onJobCancelled" />
+        <JobPanel :job="job" @cancelled="onJobCancelled" @cleaned="onJobCleaned" />
       </section>
 
       <footer class="mt-10 text-center text-xs text-slate-500">

@@ -1,14 +1,17 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { cancel, downloadUrl } from '../api'
+import { cancel, deleteJob, downloadUrl } from '../api'
 
 const props = defineProps({
   job: { type: Object, required: true },
 })
 
-const emit = defineEmits(['cancelled'])
+const emit = defineEmits(['cancelled', 'cleaned'])
 const logBox = ref(null)
 const cancelling = ref(false)
+const confirming = ref(false)
+const cleaning = ref(false)
+const cleanupError = ref('')
 
 const stateInfo = computed(() => {
   const map = {
@@ -23,6 +26,7 @@ const stateInfo = computed(() => {
 
 const isActive = computed(() => ['queued', 'running'].includes(props.job.state))
 const isDone = computed(() => props.job.state === 'done')
+const isFinished = computed(() => !isActive.value)
 
 watch(
   () => props.job.log.length,
@@ -39,6 +43,20 @@ async function doCancel() {
     emit('cancelled')
   } finally {
     cancelling.value = false
+  }
+}
+
+async function doCleanup() {
+  cleaning.value = true
+  cleanupError.value = ''
+  try {
+    await deleteJob(props.job.id)
+    emit('cleaned')
+  } catch (e) {
+    cleanupError.value = e.message
+  } finally {
+    cleaning.value = false
+    confirming.value = false
   }
 }
 </script>
@@ -98,14 +116,45 @@ async function doCancel() {
       </button>
       <span v-else></span>
 
-      <a
-        v-if="isDone"
-        :href="downloadUrl(job.id)"
-        class="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-400 to-teal-400 px-5 py-2.5 text-sm font-bold text-emerald-950 shadow-lg shadow-emerald-500/20 transition-all hover:shadow-emerald-400/30 active:scale-[0.98]"
-      >
-        ⬇ 下载量化结果
-      </a>
+      <!-- 结束后的操作：下载 + 清理 -->
+      <div v-if="isFinished" class="flex flex-wrap items-center justify-end gap-2.5">
+        <a
+          v-if="isDone"
+          :href="downloadUrl(job.id)"
+          class="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-400 to-teal-400 px-5 py-2.5 text-sm font-bold text-emerald-950 shadow-lg shadow-emerald-500/20 transition-all hover:shadow-emerald-400/30 active:scale-[0.98]"
+        >
+          ⬇ 下载量化结果
+        </a>
+
+        <!-- 清理：二次确认，避免误删 -->
+        <template v-if="confirming">
+          <span class="text-xs font-medium text-amber-300">确认删除该作业文件？</span>
+          <button
+            class="rounded-lg border border-rose-400/50 bg-rose-500/15 px-4 py-2 text-sm font-medium text-rose-200 transition-colors hover:bg-rose-500/25 disabled:opacity-40"
+            :disabled="cleaning"
+            @click="doCleanup"
+          >
+            {{ cleaning ? '清理中…' : '确认清理' }}
+          </button>
+          <button
+            class="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-white/5 disabled:opacity-40"
+            :disabled="cleaning"
+            @click="confirming = false"
+          >
+            返回
+          </button>
+        </template>
+        <button
+          v-else
+          class="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-rose-400/50 hover:text-rose-300"
+          @click="confirming = true"
+        >
+          🧹 清理空间
+        </button>
+      </div>
     </div>
+
+    <p v-if="cleanupError" class="mt-2 text-xs text-rose-400">{{ cleanupError }}</p>
   </div>
 </template>
 

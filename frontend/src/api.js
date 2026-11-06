@@ -40,6 +40,10 @@ export function cancel(id) {
   return request(`/api/jobs/${id}/cancel`, { method: 'POST' })
 }
 
+export function deleteJob(id) {
+  return request(`/api/jobs/${id}/delete`, { method: 'POST' })
+}
+
 export function downloadUrl(id) {
   return `/api/jobs/${id}/download`
 }

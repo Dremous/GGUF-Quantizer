@@ -29,6 +29,7 @@
 - ⚙️ **量化参数**：分组选择量化类型（经典 / K-quant / IQ 系），自定义输出文件名
 - 📊 **实时进度**：终端式日志实时滚动，进度条 + 状态徽章
 - ⬇️ **下载**：量化完成一键下载结果
+- 🧹 **手动清理**：下载后一键清理量化文件、立即释放磁盘空间（带二次确认），无需等待定时清理
 - 🐳 **自动发布**：GitHub Action 自动编译并发布多架构镜像到 GHCR
 
 ---
@@ -106,7 +107,7 @@ docker compose up -d --build     # 首次需联网编译 llama.cpp，耗时较�
 |------|--------|------|
 | `MAX_UPLOAD_MB` | `102400` | 单个上传文件大小上限（MB），默认 100 GiB；`0` = 不限制 |
 | `CLEANUP_HOURS` | `12` | 上传/输出文件自动清理时间（小时） |
-| `AUTO_CLEAN_OUTPUTS` | `1` | 是否自动清理量化结果文件 |
+| `AUTO_CLEAN_OUTPUTS` | `1` | 会不会自动清理量化结果文件 |
 | `DATA_DIR` | `/data` | 数据目录（挂载卷） |
 | `WEB_DIST` | `/app/web` | 前端构建产物目录 |
 | `APP_VERSION` | `dev` | 镜像版本（注入 `/api/health`） |
@@ -121,7 +122,7 @@ docker compose up -d --build     # 首次需联网编译 llama.cpp，耗时较�
 - 手动触发（Actions → Run workflow）
 - 每周日自动重建
 
-**每次构建都会自动拉取最新的 llama.cpp 源码并编译最新 `llama-quantize`**：工作流会查询 llama.cpp `master` 的最新 commit，把其 SHA 作为 `LLAMA_CPP_REF` 注入构建——SHA 每次变化会令 Docker 层缓存失效，从而真正重新拉取、重新编译，不会被缓存复用旧版。
+**每次构建都会自动拉取最新的 llama.cpp 源码并编译最新 `llama-quantize`**：工作流会查询 llama.cpp `master` 的最新 commit，把其 SHA 作为 `LLAMA_CPP_REF` 注入构建——SHA 每次变化会令 Docker 层缓存失效，从而真正重新拉取、重新编译，不被缓存复用旧版。
 
 发布标签：`latest`、`<日期>`、`<日期>-<commit 短哈希>`，其余层（apt/npm/系统依赖）仍使用 gha 缓存加速，只有 llama.cpp 编译始终全新执行。
 

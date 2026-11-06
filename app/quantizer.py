@@ -121,7 +121,7 @@ class Job:
         self.log: list[str] = []
         self.error: str | None = None
         self.created_at = time.time()
-        self.finished_at: float | None = None
+        self.finished_at = float | None = None
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
 
@@ -182,6 +182,11 @@ class JobManager:
     def all(self) -> list[Job]:
         with self._lock:
             return list(self._jobs.values())
+
+    def remove(self, job_id: str) -> None:
+        """从注册表移除作业（文件已由调用方删除）。"""
+        with self._lock:
+            self._jobs.pop(job_id, None)
 
     def start(self, job: Job) -> None:
         """启动作业：立即排队，交给线程池执行。"""
