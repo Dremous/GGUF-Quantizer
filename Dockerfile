@@ -66,6 +66,7 @@ RUN set -eux; \
     mkdir -p /opt/llama; \
     tar -xzf /tmp/llama.tar.gz -C /opt/llama --strip-components=1; \
     rm -f /tmp/llama.tar.gz; \
+    echo "${FOUND}" > /opt/llama/RELEASE; \
     test -x /opt/llama/llama-quantize
 
 

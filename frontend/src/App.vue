@@ -5,10 +5,12 @@ import HealthBadge from './components/HealthBadge.vue'
 import UploadZone from './components/UploadZone.vue'
 import QuantForm from './components/QuantForm.vue'
 import JobPanel from './components/JobPanel.vue'
+import AboutModal from './components/AboutModal.vue'
 
 const types = ref(null)
 const upload = ref(null)
 const job = ref(null)
+const aboutOpen = ref(false)
 let pollTimer = null
 
 onMounted(async () => {
@@ -112,7 +114,15 @@ function reset() {
             上传 FP16 GGUF → 选择量化参数 → 下载量化结果（基于 llama.cpp）
           </p>
         </div>
-        <HealthBadge />
+        <div class="flex items-center gap-2">
+          <HealthBadge />
+          <button
+            class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs text-slate-300 transition-colors hover:border-emerald-400/40 hover:text-emerald-300"
+            @click="aboutOpen = true"
+          >
+            <span aria-hidden="true">ⓘ</span> 关于
+          </button>
+        </div>
       </header>
 
       <!-- 步骤 1：上传 -->
@@ -176,7 +186,7 @@ function reset() {
             class="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-emerald-400/90 to-teal-400/90 text-[13px] font-bold text-emerald-950"
             >3</span
           >
-          <h2 class="text[15px] font-bold text-white">量化进度与结果</h2>
+          <h2 class="text-[15px] font-bold text-white">量化进度与结果</h2>
           <span class="text-xs text-slate-500">实时日志</span>
         </div>
         <JobPanel :job="job" @cancelled="onJobCancelled" @cleaned="onJobCleaned" />
@@ -186,5 +196,8 @@ function reset() {
         GGUF Quantizer · llama.cpp llama-quantize · FastAPI + Vue
       </footer>
     </div>
+
+    <!-- 关于弹窗：展示 llama.cpp 版本等信息 -->
+    <AboutModal :open="aboutOpen" @close="aboutOpen = false" />
   </div>
 </template>

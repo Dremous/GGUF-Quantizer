@@ -48,6 +48,18 @@ QUANT_BINARY = os.environ.get("QUANT_BINARY", "llama-quantize")
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "102400")) * 1024 * 1024
 CLEANUP_HOURS = float(os.environ.get("CLEANUP_HOURS", "12"))
 APP_VERSION = os.environ.get("APP_VERSION", "dev")
+# llama.cpp 版本：构建时把解析到的 bXXXX 发布标签写入该文件，供“关于”弹窗展示
+LLAMA_RELEASE_FILE = os.environ.get("LLAMA_RELEASE_FILE", "/opt/llama/RELEASE")
+
+
+def _read_llama_version() -> str:
+    try:
+        return Path(LLAMA_RELEASE_FILE).read_text(encoding="utf-8").strip() or "unknown"
+    except OSError:
+        return "unknown"
+
+
+LLAMA_CPP_VERSION = _read_llama_version()
 
 
 def _resolve_web_dist() -> Path:
@@ -141,6 +153,7 @@ def health() -> dict:
     return {
         "status": "ok",
         "version": APP_VERSION,
+        "llama_cpp_version": LLAMA_CPP_VERSION,
         "quant_binary": QUANT_BINARY,
         "disk_free_gib": round(shutil.disk_usage(OUTPUT_DIR).free / (1 << 30), 2),
         "active_jobs": sum(
