@@ -1,17 +1,3 @@
-"""
-GGUF Quantizer - Web 服务入口 (FastAPI)
-
-API 概览：
-  GET  /                         前端页面
-  GET  /api/quant-types          支持的量化类型
-  POST /api/upload               上传 FP16 GGUF
-  POST /api/quantize             发起量化作业
-  GET  /api/jobs/{id}            查询作业状态 / 日志
-  POST /api/jobs/{id}/cancel     取消作业
-  GET  /api/jobs/{id}/download   下载量化结果
-  POST /api/uploads/{id}/delete  删除已上传但未量化的文件
-"""
-
 from __future__ import annotations
 
 import os
@@ -43,7 +29,8 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
 QUANT_BINARY = os.environ.get("QUANT_BINARY", "llama-quantize")
-MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "4096")) * 1024 * 1024
+# 单个上传文件上限：默认 100 GiB（102400 MB）；设为 0 表示不限制，仅受磁盘空间约束
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "102400")) * 1024 * 1024
 CLEANUP_HOURS = float(os.environ.get("CLEANUP_HOURS", "12"))
 APP_VERSION = os.environ.get("APP_VERSION", "dev")
 

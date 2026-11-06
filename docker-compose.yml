@@ -10,7 +10,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MAX_UPLOAD_MB=4096        # 单个上传文件上限（MB）
+      - MAX_UPLOAD_MB=102400      # 单个上传文件上限（MB），默认 100 GiB；设为 0 表示不限制
       - CLEANUP_HOURS=12          # 上传/输出文件自动清理时间（小时）
       - AUTO_CLEAN_OUTPUTS=1      # 是否自动清理量化结果文件
     volumes:

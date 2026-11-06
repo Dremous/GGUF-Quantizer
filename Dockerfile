@@ -70,7 +70,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DATA_DIR=/data \
     WEB_DIST=/app/web \
-    MAX_UPLOAD_MB=4096 \
+    MAX_UPLOAD_MB=102400 \
     CLEANUP_HOURS=12 \
     PYTHONUNBUFFERED=1
 
