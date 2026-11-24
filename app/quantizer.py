@@ -28,16 +28,21 @@ logger = logging.getLogger("quantizer")
 # 量化类型定义
 # ---------------------------------------------------------------------------
 # name: (说明, 分组, 是否推荐)
-# 分组: classic / k-quant / iq / other
+# 分组: classic / k-quant / iq / ternary / other
+# 注意：仅收录 llama-quantize 实际支持的类型（区分大小写不敏感）。
+# Q8_K 是 llama.cpp 内部中间类型，llama-quantize 不接受，故不提供。
 QUANT_TYPES: dict[str, tuple[str, str, bool]] = {
     # ---- 经典量化 ----
-    "q4_0": ("4-bit 经典量化，体积最小，质量较低", "classic", False),
+    "q1_0": ("1-bit 经典量化（1.125 bpw），体积最小，质量损失明显", "classic", False),
+    "q2_0": ("2-bit 经典量化（2.25 bpw，group 64）", "classic", False),
+    "q4_0": ("4-bit 经典量化，体积较小，质量较低", "classic", False),
     "q4_1": ("4-bit 经典量化，比 q4_0 略大、略准", "classic", False),
     "q5_0": ("5-bit 经典量化，质量/体积较均衡", "classic", False),
     "q5_1": ("5-bit 经典量化，比 q5_0 略大、略准", "classic", False),
     "q8_0": ("8-bit 经典量化，质量高，体积约为一半", "classic", False),
     # ---- K-quant ----
-    "q2_K": ("2-bit K-quant，体积最小，质量较低", "k-quant", False),
+    "q2_K": ("2-bit K-quant，体积很小，质量较低", "k-quant", False),
+    "q2_K_S": ("2-bit K-quant（小型），比 q2_K 更激进", "k-quant", False),
     "q3_K_S": ("3-bit K-quant（小型）", "k-quant", False),
     "q3_K_M": ("3-bit K-quant（中等）", "k-quant", False),
     "q3_K_L": ("3-bit K-quant（大型，更准）", "k-quant", False),
@@ -46,20 +51,35 @@ QUANT_TYPES: dict[str, tuple[str, str, bool]] = {
     "q5_K_S": ("5-bit K-quant（小型）", "k-quant", False),
     "q5_K_M": ("5-bit K-quant（中等）", "k-quant", False),
     "q6_K": ("6-bit K-quant，质量较高", "k-quant", False),
-    "q8_K": ("8-bit K-quant，质量很高", "k-quant", False),
-    # ---- IQ 混合量化（体积更小，要求新内核）----
-    "iq4_xs": ("4-bit IQ 混合量化，体积更小", "iq", False),
-    "iq4_nl": ("4-bit IQ 混合量化（非分层）", "iq", False),
+    # ---- IQ 量化（体积更小；1-3 bit 档无 imatrix 时质量下降明显）----
+    "iq1_s": ("1.56 bpw IQ 量化，极限压缩，建议配合 imatrix", "iq", False),
+    "iq1_m": ("1.75 bpw IQ 量化，极限压缩，建议配合 imatrix", "iq", False),
+    "iq2_xxs": ("2.06 bpw IQ 量化，体积优先", "iq", False),
+    "iq2_xs": ("2.31 bpw IQ 量化，体积优先", "iq", False),
+    "iq2_s": ("2.5 bpw IQ 量化，质量/体积均衡", "iq", False),
+    "iq2_m": ("2.7 bpw IQ 量化，2-bit 档中质量最好", "iq", False),
+    "iq3_xxs": ("3.06 bpw IQ 量化，体积优先", "iq", False),
+    "iq3_xs": ("3.3 bpw IQ 量化", "iq", False),
+    "iq3_s": ("3.44 bpw IQ 量化", "iq", False),
+    "iq3_m": ("3.66 bpw IQ 混合量化，3-bit 档中质量最好", "iq", False),
+    "iq4_xs": ("4.25 bpw IQ 量化，比 q4_K_S 更小", "iq", False),
+    "iq4_nl": ("4.5 bpw IQ 非线性量化", "iq", False),
+    # ---- 三值量化（仅适用于 BitNet 等原生三值模型）----
+    "tq1_0": ("1.69 bpw 三值量化，仅适用于 BitNet 类模型", "ternary", False),
+    "tq2_0": ("2.06 bpw 三值量化，仅适用于 BitNet 类模型", "ternary", False),
     # ---- 其它 ----
+    "bf16": ("保持 BF16 半精度，体积同 FP16，适合 BF16 原生模型", "other", False),
     "f16": ("保持 FP16（用于再转换/测试）", "other", False),
     "f32": ("转为 FP32，体积最大", "other", False),
+    "mxfp4_moe": ("MXFP4 MoE 量化，仅适用于 MoE 模型（如 GPT-OSS）", "other", False),
 }
 
 # 该组别的排序标签（前端也按此分组展示）
 QUANT_GROUPS: dict[str, str] = {
-    "classic": "经典量化 (4/5/8-bit)",
+    "classic": "经典量化 (1/2/4/5/8-bit)",
     "k-quant": "K-quant (K 系，推荐)",
-    "iq": "IQ 混合量化（体积优先）",
+    "iq": "IQ 量化（体积优先）",
+    "ternary": "三值量化（仅 BitNet 类模型）",
     "other": "其它",
 }
 
@@ -80,11 +100,16 @@ class QuantizeError(Exception):
 
 # 磁盘空间余量校验：目标文件体积约占源文件的估算比例
 _SPACE_FACTOR = {
+    "q1_0": 0.12, "q2_0": 0.18,
     "q4_0": 0.30, "q4_1": 0.32, "q5_0": 0.37, "q5_1": 0.39, "q8_0": 0.55,
-    "q2_K": 0.25, "q3_K_S": 0.29, "q3_K_M": 0.31, "q3_K_L": 0.33,
-    "q4_K_S": 0.33, "q4_K_M": 0.36, "q5_K_S": 0.41, "q5_K_M": 0.44,
-    "q6_K": 0.49, "q8_K": 0.58, "iq4_xs": 0.32, "iq4_nl": 0.32,
-    "f16": 1.0, "f32": 2.0,
+    "q2_K": 0.25, "q2_K_S": 0.24, "q3_K_S": 0.29, "q3_K_M": 0.31, "q3_K_L": 0.33,
+    "q4_K_S": 0.33, "q4_K_M": 0.36, "q5_K_S": 0.41, "q5_K_M": 0.44, "q6_K": 0.49,
+    "iq1_s": 0.14, "iq1_m": 0.15,
+    "iq2_xxs": 0.17, "iq2_xs": 0.18, "iq2_s": 0.20, "iq2_m": 0.21,
+    "iq3_xxs": 0.24, "iq3_xs": 0.25, "iq3_s": 0.26, "iq3_m": 0.27,
+    "iq4_xs": 0.32, "iq4_nl": 0.32,
+    "tq1_0": 0.15, "tq2_0": 0.17,
+    "bf16": 1.0, "f16": 1.0, "f32": 2.0, "mxfp4_moe": 0.32,
 }
 
 

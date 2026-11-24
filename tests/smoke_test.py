@@ -71,7 +71,16 @@ check("health", r.status_code == 200 and r.json()["status"] == "ok")
 r = client.get("/api/quant-types")
 qt = r.json()
 check("quant-types has q4_K_M", "q4_K_M" in qt["types"] and qt["default"] == "q4_K_M")
-check("quant-types groups", set(qt["groups"]) == {"classic", "k-quant", "iq", "other"})
+check("quant-types groups", set(qt["groups"]) == {"classic", "k-quant", "iq", "ternary", "other"})
+check("quant-types has extended options",
+      all(t in qt["types"] for t in (
+          "q1_0", "q2_0", "q2_K_S",
+          "iq1_s", "iq1_m", "iq2_xxs", "iq2_xs", "iq2_s", "iq2_m",
+          "iq3_xxs", "iq3_xs", "iq3_s", "iq3_m",
+          "tq1_0", "tq2_0", "bf16", "mxfp4_moe")))
+check("quant-types drops unsupported q8_K", "q8_K" not in qt["types"])
+check("every type belongs to a known group",
+      all(info[1] in qt["groups"] for info in qt["types"].values()))
 
 # 3. upload 非法文件
 r = client.post("/api/upload", files={"file": ("bad.bin", b"\x00\x01\x02", "application/octet-stream")})

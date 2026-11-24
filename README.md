@@ -85,20 +85,30 @@ docker compose up -d --build     # 构建前端，并联网下载官方预编译
 
 | 类型 | 说明 | 推荐 |
 |------|------|:----:|
-| q4_0 | 4-bit 经典量化，体积最小 | |
-| q5_1 | 5-bit 经典量化，质量/体积均衡 | |
+| q1_0 / q2_0 | 1/2-bit 经典量化（1.125 / 2.25 bpw），极限压缩 | |
+| q4_0 / q4_1 | 4-bit 经典量化 | |
+| q5_0 / q5_1 | 5-bit 经典量化，质量/体积均衡 | |
 | q8_0 | 8-bit 经典量化，质量高 | |
-| q2_K | 2-bit K-quant，体积最小 | |
-| q3_K_M | 3-bit K-quant（中等） | |
+| q2_K / q2_K_S | 2-bit K-quant，体积很小 | |
+| q3_K_S / q3_K_M / q3_K_L | 3-bit K-quant（小/中/大） | |
+| q4_K_S | 4-bit K-quant（小型） | |
 | **q4_K_M** | **4-bit K-quant（中等）** | ★ |
-| q5_K_M | 5-bit K-quant（中等） | |
+| q5_K_S / q5_K_M | 5-bit K-quant（小/中） | |
 | q6_K | 6-bit K-quant，质量较高 | |
-| q8_K | 8-bit K-quant，质量很高 | |
-| iq4_xs / iq4_nl | IQ 混合量化，体积更小 | |
-| f16 / f32 | 保持 FP16 / 转 FP32 | |
+| iq1_s / iq1_m | 1.56 / 1.75 bpw IQ 量化，极限压缩 | |
+| iq2_xxs / iq2_xs / iq2_s / iq2_m | 2.06–2.7 bpw IQ 量化，体积优先 | |
+| iq3_xxs / iq3_xs / iq3_s / iq3_m | 3.06–3.66 bpw IQ 量化 | |
+| iq4_xs / iq4_nl | 4.25 / 4.5 bpw IQ 量化，比同级 K-quant 更小 | |
+| tq1_0 / tq2_0 | 三值量化，仅适用于 BitNet 类原生三值模型 | |
+| bf16 / f16 / f32 | 保持 BF16 / FP16 / 转 FP32 | |
+| mxfp4_moe | MXFP4 MoE 量化，仅适用于 MoE 模型（如 GPT-OSS） | |
 
 > 💡 经验值：一般场景推荐 **q4_K_M**（体积约 1/4，质量与速度均衡）；
-> 追求质量用 q6_K / q8_K；追求最小体积用 q2_K / iq4_xs。
+> 追求质量用 q6_K / q8_0；追求最小体积用 q2_K / iq2_xxs / iq1_s。
+>
+> ⚠️ 注意：1–3 bit 的 IQ 量化在没有重要性矩阵（imatrix）时质量下降明显，建议先用带 imatrix 的流程生成；
+> tq1_0 / tq2_0 只对 BitNet 类三值模型有效；mxfp4_moe 只对 MoE 模型有效，普通稠密模型会量化失败。
+> 另外 llama-quantize 不支持 q8_K（它是内部中间类型），高质量 8-bit 请选 q8_0。
 
 ---
 
